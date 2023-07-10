@@ -21,6 +21,18 @@ interface StoneGmData {
   [key: string]: StoneLvGm
 }
 
+interface BuyView {
+  xz: number,
+  yk: number,
+  ylb: number,
+  zlb: number,
+  srlb: number,
+  total: number,
+  untradeableKeys: number,
+  rest: number,
+  tradeableKeys: string | undefined
+}
+
 export default defineComponent({
   components: {
     AntDesignOutlined,
@@ -52,25 +64,35 @@ export default defineComponent({
       isLvUpCurrentStar: false,
       // 人民币预算
       rmbBudget: 0,
-      budgetType: 'no',
+      // 预算使用时间
+      budgetUseMonths: 1,
+      // 已有能量
+      hasEnergy: 0,
       uri: props.uri,
       name: props.name
     })
 
+    const buyView: BuyView = reactive<BuyView>({
+      xz: 0,
+      yk: 0,
+      ylb: 0,
+      zlb: 0,
+      srlb: 0,
+      total: 0,
+      untradeableKeys: 0,
+      rest: 0,
+      tradeableKeys: undefined
+    })
+
     const lvUpCost = ref(0);
     const fromCurr2LvUpCost = ref(0);
-    const costRmb = ref(0);
     // 共鸣
     const gmData: StoneGmData = StoneData.gm;
     const stoneGm = computed(() => gmData[formData.startAmount + ''][formData.updateToLevel + ''])
     watch(lvUpCost, (value) => {
       context.emit('stone-cost-changed', { stone: { name: props.name, uri: props.uri }, cost: value, gm: stoneGm, still: fromCurr2LvUpCost })
     });
-    watch(() => formData.budgetType, () => {
-      if (formData.budgetType === 'no') {
-        formData.rmbBudget = 0;
-      }
-    })
+
 
     const calcProcess: CalcProcess = reactive({
       title: formData.updateToLevel < 2 ? '升级过程' : `升级到lv${formData.updateToLevel}计算过程`,
@@ -95,7 +117,7 @@ export default defineComponent({
         return;
       }
       const toCurrentLv = calcTotal(false, formData.currentLevel);
-      fromCurr2LvUpCost.value = lvUpCost.value - toCurrentLv;
+      fromCurr2LvUpCost.value = lvUpCost.value - toCurrentLv - formData.hasEnergy * formData.updatePricePerOne;
       if (formData.isLvUpCurrentStar || formData.currentLevel === -1) {
         fromCurr2LvUpCost.value += formData.stoneCost;
       }
@@ -222,6 +244,191 @@ export default defineComponent({
       return totalCost;
     }
 
+    const onCalcBudgetUseType = () => {
+
+      interface CalcFactor {
+        xz: number,
+        yk: number,
+        ylb: number,
+        zlb: number,
+        srlb: number
+      }
+
+      interface TradeableKey {
+        t1298: number,
+        t648: number,
+        t328: number,
+        t198: number,
+        t98: number,
+        t30: number,
+        t6: number,
+        totalKeys: number
+      }
+
+      const xzCost = 30;
+      const ykCost = 68;
+      const ylbCost = 328;
+      const zlbCost = 68;
+      const srlbCost = 40;
+      const budgetUseMonths = formData.budgetUseMonths || 1;
+      // 先祖最大数量
+      const xzCnt = budgetUseMonths;
+      // 月卡最大数量
+      const ykCnt = budgetUseMonths;
+      // 月礼包最大数量
+      const ylbCnt = budgetUseMonths;
+      // 周礼包最大数量
+      const zlbCnt = budgetUseMonths * 4;
+      // 三日礼包最大数量
+      const srCnt = budgetUseMonths * 16;
+      const maxCnt = Math.max(xzCnt, ykCnt, ylbCnt, zlbCnt, srCnt);
+
+      const calcEachTypeKeys = (factor: CalcFactor): number => {
+        return factor.xz * 3 + factor.yk * 7 + factor.ylb * 30 + factor.zlb * 6 + factor.srlb * 3;
+      }
+      const calcEachTypeCost = (factor: CalcFactor): number => {
+        return factor.xz * xzCost + factor.yk * ykCost + factor.ylb * ylbCost + factor.zlb * zlbCost + factor.srlb * srlbCost;
+      }
+      const calcBudgetNoOverflow = (factor: CalcFactor, currBudget: number): boolean => {
+        return calcEachTypeCost(factor) <= currBudget;
+      }
+      // 计算闪光不朽钥石购买档次数量
+      const calcTradeableCount = (cost: number): TradeableKey => {
+
+        const getCost = (cost: number, minus: number) => {
+          return cost - minus > 0 ? cost - minus : 0;
+        }
+
+        let calcCost = cost;
+        const t1298Cnt = Math.floor(calcCost / 1298);
+        if (calcCost - t1298Cnt * 1298 > 0) {
+          calcCost = calcCost - t1298Cnt * 1298;
+        }
+        const t648Cnt = Math.floor(calcCost / 648);
+        if (calcCost - t648Cnt * 648 > 0) {
+          calcCost = calcCost - t648Cnt * 648;
+        }
+        const t328Cnt = Math.floor(calcCost / 328);
+        if (calcCost - t328Cnt * 328 > 0) {
+          calcCost = calcCost - t328Cnt * 328;
+        }
+        const t198Cnt = Math.floor(calcCost / 198);
+        if (calcCost - t198Cnt * 198 > 0) {
+          calcCost = calcCost - t198Cnt * 198;
+        }
+        const t98Cnt = Math.floor(calcCost / 98);
+        if (calcCost - t98Cnt * 98 > 0) {
+          calcCost = calcCost - t98Cnt * 98;
+        }
+        const t30Cnt = Math.floor(calcCost / 30);
+        if (calcCost - t30Cnt * 30 > 0) {
+          calcCost = calcCost - t30Cnt * 30;
+        }
+        const t6Cnt = Math.floor(calcCost / 6);
+
+        const totalKeys = Math.floor(
+          (t1298Cnt * (12980 + 3000) + t648Cnt * (6480 + 1288) + t328Cnt * (3280 + 588) + t198Cnt * (1980 + 298) + t98Cnt * (980 + 128) + t30Cnt * (300 + 30) + t6Cnt * 60)
+          / 160
+        );
+        return {
+          t1298: t1298Cnt,
+          t648: t648Cnt,
+          t328: t328Cnt,
+          t198: t198Cnt,
+          t98: t98Cnt,
+          t30: t30Cnt,
+          t6: t6Cnt,
+          totalKeys: totalKeys
+        };
+      }
+      // 按性价比计算，月卡>先祖>月礼包>周礼包>三日礼包，因此最先满足性价比高的
+      let budgetRest = formData.rmbBudget;
+      const canBuyAny = (factor: CalcFactor, budget: number) => {
+        if (budget < 30) {
+          return false;
+        }
+        return factor.xz < xzCnt || factor.yk < ykCnt || factor.ylb < ykCnt || factor.zlb < zlbCnt || factor.srlb < srCnt;
+      }
+      const calcFactor: CalcFactor = {
+        xz: 0,
+        yk: 0,
+        ylb: 0,
+        zlb: 0,
+        srlb: 0
+      };
+
+      while (canBuyAny(calcFactor, budgetRest)) {
+        let cantBuyAny = 0;
+        calcFactor.yk++;
+        if (calcFactor.yk <= ykCnt && budgetRest - ykCost > 0) {
+          budgetRest -= ykCost;
+          continue;
+        } else {
+          cantBuyAny++;
+          calcFactor.yk--;
+        }
+        calcFactor.xz++;
+        if (calcFactor.xz <= xzCnt && budgetRest - xzCost > 0) {
+          budgetRest -= xzCost;
+          continue;
+        } else {
+          cantBuyAny++;
+          calcFactor.xz--;
+        }
+        calcFactor.ylb++;
+        if (calcFactor.ylb <= ylbCnt && budgetRest - ylbCost > 0) {
+          budgetRest -= ylbCost;
+          continue;
+        } else {
+          cantBuyAny++;
+          calcFactor.ylb--;
+        }
+        calcFactor.zlb++;
+        if (calcFactor.zlb <= zlbCnt && budgetRest - zlbCost > 0) {
+          budgetRest -= zlbCost;
+          continue;
+        } else {
+          cantBuyAny++;
+          calcFactor.zlb--;
+        }
+        calcFactor.srlb++;
+        if (calcFactor.srlb <= srCnt && budgetRest - srlbCost > 0) {
+          budgetRest -= srlbCost;
+          continue;
+        } else {
+          cantBuyAny++;
+          calcFactor.srlb--;
+        }
+        if (cantBuyAny === 5) {
+          // 一个都没法买
+          break;
+        }
+      }
+      const tradeableKeys = calcTradeableCount(budgetRest);
+      buyView.xz = calcFactor.xz;
+      buyView.yk = calcFactor.yk;
+      buyView.ylb = calcFactor.ylb;
+      buyView.zlb = calcFactor.zlb;
+      buyView.srlb = calcFactor.srlb;
+      buyView.total = calcEachTypeCost(calcFactor);
+      buyView.untradeableKeys = calcEachTypeKeys(calcFactor);
+      buyView.rest = formData.rmbBudget - buyView.total;
+      const keyArray = [
+        tradeableKeys.t1298 > 0 ? `1298元${tradeableKeys.t1298}次` : undefined,
+        tradeableKeys.t648 > 0 ? `648元${tradeableKeys.t648}次` : undefined,
+        tradeableKeys.t328 > 0 ? `328元${tradeableKeys.t328}次` : undefined,
+        tradeableKeys.t198 > 0 ? `198元${tradeableKeys.t198}次` : undefined,
+        tradeableKeys.t98 > 0 ? `98元${tradeableKeys.t98}次` : undefined,
+        tradeableKeys.t30 > 0 ? `30元${tradeableKeys.t30}次` : undefined,
+        tradeableKeys.t6 > 0 ? `6元${tradeableKeys.t6}次` : undefined,
+      ].filter(item => item !== undefined);
+      if (tradeableKeys.totalKeys !== 0) {
+        buyView.tradeableKeys = keyArray.join(',') + `，共计${tradeableKeys.totalKeys}个不朽闪光钥匙`;
+      } else {
+        buyView.tradeableKeys = undefined;
+      }
+    }
+
     // 默认计算一次
     lvUpCost.value = calcTotal();
 
@@ -231,12 +438,13 @@ export default defineComponent({
 
     return {
       formData,
+      buyView,
       lvUpCost,
       fromCurr2LvUpCost,
       calcProcess,
       stoneGm,
-      costRmb,
       onConditionChanged,
+      onCalcBudgetUseType,
       onStoneDelete
     }
   }
@@ -304,7 +512,7 @@ export default defineComponent({
               </a-row>
               <a-divider />
               <a-row :gutter="24">
-                <a-col :span="12">
+                <a-col :span="6">
                   <a-form-item name="lsCurrentLevel" label="当前等级">
                     <a-select v-model:value="formData.currentLevel" @change="onConditionChanged">
                       <a-select-option :value="-1">我还没有石头</a-select-option>
@@ -314,6 +522,16 @@ export default defineComponent({
                     </a-select>
                   </a-form-item>
                 </a-col>
+                <a-col :span="6">
+                  <a-form-item name="lsCurrentLevel" label="已有能量">
+                    <a-input-number v-model:value="formData.hasEnergy" :step="1" style="width: 100%;" :min="0"
+                      @change="onConditionChanged">
+                      <template #addonAfter>
+                        <span>个</span>
+                      </template>
+                    </a-input-number>
+                  </a-form-item>
+                </a-col>
                 <a-col :span="12">
                   <a-form-item name="lslvUpCurrentStar" label="是否升级到当前星数">
                     <a-switch v-model:checked="formData.isLvUpCurrentStar" @change="onConditionChanged"></a-switch>
@@ -321,23 +539,46 @@ export default defineComponent({
                 </a-col>
               </a-row>
               <a-row :gutter="24">
-                <a-col :span="12">
-                  <a-form-item name="lsRmbBudget" label="预算（人民币）">
+                <a-col :span="6">
+                  <a-form-item name="lsRmbBudget" label="预算总额">
                     <a-input-number v-model:value="formData.rmbBudget" :step="100" style="width: 100%;" :min="0"
-                      @change="onConditionChanged"></a-input-number>
+                      @change="onCalcBudgetUseType"></a-input-number>
                   </a-form-item>
                 </a-col>
                 <a-col :span="6">
-                  <a-form-item label="预算使用方式">
-                    <a-radio-group v-model:value="formData.budgetType" @change="onConditionChanged">
-                      <a-radio-button value="no">零氪</a-radio-button>
-                      <a-radio-button value="a">月礼包(328)</a-radio-button>
-                      <a-radio-button value="b"><a-tooltip>
-                          <template #title>尽量买月礼包, 剩下的预算充值1298(会送3000)</template>
-                        </a-tooltip>
-                        月礼包+1298</a-radio-button>
-                    </a-radio-group>
+                  <a-form-item name="lsRmbBudget" label="预算使用时间" suffix="月">
+                    <a-input-number v-model:value="formData.budgetUseMonths" :step="1" style="width: 100%;" :min="1"
+                      @change="onCalcBudgetUseType">
+                      <template #addonAfter>
+                        <span>月</span>
+                      </template>
+                    </a-input-number>
                   </a-form-item>
+                </a-col>
+                <a-col :span="12">
+                  <a-descriptions title="预算最佳使用方式" layout="vertical">
+                    <a-descriptions-item label="先祖之路">{{ buyView.xz }}<h5>&nbsp;次</h5></a-descriptions-item>
+                    <a-descriptions-item label="月卡">{{ buyView.yk }}<h5>&nbsp;次</h5></a-descriptions-item>
+                    <a-descriptions-item label="月礼包">{{ buyView.ylb }}<h5>&nbsp;次</h5></a-descriptions-item>
+                    <a-descriptions-item label="周礼包">
+                      {{ buyView.zlb }}<h5>&nbsp;次</h5>
+                    </a-descriptions-item>
+                    <a-descriptions-item label="三日礼包">
+                      {{ buyView.srlb }}<h5>&nbsp;次</h5>
+                    </a-descriptions-item>
+                    <a-descriptions-item label="共计花费">
+                      {{ buyView.total }}<h5>&nbsp;元</h5>
+                    </a-descriptions-item>
+                    <a-descriptions-item label="共计不朽钥匙">
+                      {{ buyView.untradeableKeys }}<h5>&nbsp;个</h5>
+                    </a-descriptions-item>
+                    <a-descriptions-item label="剩余预算">
+                      {{ buyView.rest }}<h5>&nbsp;元</h5>
+                    </a-descriptions-item>
+                    <a-descriptions-item v-if="buyView.tradeableKeys != null" label="不朽闪光钥匙">{{
+                      buyView.tradeableKeys
+                    }}</a-descriptions-item>
+                  </a-descriptions>
                 </a-col>
               </a-row>
             </a-form>
@@ -367,9 +608,6 @@ export default defineComponent({
               <a-row :gutter="24">
                 <a-col :span="8">
                   <a-statistic title="共鸣" :value="stoneGm" style="margin-left: 15px;" />
-                </a-col>
-                <a-col :span="8">
-                  <a-statistic title="花费（人民币）" :value="costRmb" style="margin-left: 15px;" />
                 </a-col>
               </a-row>
             </a-col>

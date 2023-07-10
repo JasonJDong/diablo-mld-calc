@@ -60,10 +60,10 @@
     "windows": [
       {
         "fullscreen": false,
-        "height": 600,
+        "height": 800,
         "resizable": true,
         "title": "暗黑破坏神：不朽 费用计算器",
-        "width": 800,
+        "width": 1200,
         "maxHeight": 800,
         "maxWidth": 1200
       }
